@@ -43,7 +43,7 @@ void MX_TIM3_Init(void)
 
   /* USER CODE END TIM3_Init 1 */
   htim3.Instance = TIM3;
-  htim3.Init.Prescaler = 48-1;
+  htim3.Init.Prescaler = 4800-1;
   htim3.Init.CounterMode = TIM_COUNTERMODE_UP;
   htim3.Init.Period = 65535;
   htim3.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
@@ -147,9 +147,9 @@ void HAL_TIM_MspPostInit(TIM_HandleTypeDef* timHandle)
     HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 	 
   /* USER CODE BEGIN TIM3_MspPostInit 1 */
-	  GPIO_InitStruct.Pin = GPIO_PIN_7;
-	  GPIO_InitStruct.Pull = GPIO_PULLDOWN;
-	  HAL_GPIO_Init(GPIOA,&GPIO_InitStruct);
+	GPIO_InitStruct.Pin = GPIO_PIN_7;
+	GPIO_InitStruct.Pull = GPIO_PULLDOWN;
+	HAL_GPIO_Init(GPIOA,&GPIO_InitStruct);
 	  
   /* USER CODE END TIM3_MspPostInit 1 */
   }
@@ -182,13 +182,16 @@ void HAL_TIM_Base_MspDeInit(TIM_HandleTypeDef* tim_baseHandle)
 }      
 
 /* USER CODE BEGIN 1 */
+uint8_t TIM3CH2_Flag = 0;
 /* bit15 捕获完成标识     bit14 捕获到高电平标识    bit13 - 0 捕获高电平后定时器溢出的次数 */
-uint16_t TIM3CH2_CAPTURE_STA = 0;	//输入捕获状态
-uint16_t TIM3CH2_CAPTURE_VAL = 0;		//输入捕获值
-
+uint16_t TIM3CH2_CAPTURE_STA = 0;	//输入捕获状态 高电平
+uint16_t TIM3CH2_CAPTURE_VAL = 0;		//输入捕获值	高电平
+/* bit15 捕获完成标识     bit14 捕获到高电平标识    bit13 - 0 捕获高电平后定时器溢出的次数 */
+uint16_t TIM3CH2_CAPTURE_Period_STA = 0; //周期捕获的输入状态
+uint16_t TIM3CH2_CAPTURE_Period_VAL = 0; //周期捕获的值
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
-	if(htim->Instance == TIM3)	//TIM3周期为500ms
+	if(htim->Instance == TIM3)	//TIM3周期为0xffffus
 	{
 		if((TIM3CH2_CAPTURE_STA & 0x8000) == 0)		//还未成功捕获
 		{
@@ -203,32 +206,79 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 					TIM3CH2_CAPTURE_STA++;
 			}
 		}
+		if((TIM3CH2_CAPTURE_Period_STA & 0X8000) ==0)
+		{
+			if(TIM3CH2_CAPTURE_Period_STA & 0x4000)
+			{
+				if((TIM3CH2_CAPTURE_Period_STA & 0x3fff) == 0x3fff)
+				{
+					TIM3CH2_CAPTURE_Period_STA |= 0x8000;
+					TIM3CH2_CAPTURE_Period_VAL = 0xffff;
+				}
+				else
+					TIM3CH2_CAPTURE_Period_STA++;
+			}
+		}
+		
 	}
 }
 
 
 void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
 {
-	if((TIM3CH2_CAPTURE_STA & 0x8000) == 0)		//还未成功捕获
-	{
-		if(TIM3CH2_CAPTURE_STA & 0x4000)			//捕获到一个下降沿
+	if(htim->Channel == HAL_TIM_ACTIVE_CHANNEL_2)
+	{	
+		
+		/* 测试PWM高电平持续时间 */
+		if(TIM3CH2_Flag == 1)
 		{
-			TIM3CH2_CAPTURE_STA|= 0x8000;			//标记成功捕获到一次高电平脉冲
-			TIM3CH2_CAPTURE_VAL = HAL_TIM_ReadCapturedValue(&htim3,TIM_CHANNEL_2);//获取当前的捕获值
-			TIM_RESET_CAPTUREPOLARITY(&htim3,TIM_CHANNEL_2);						  //清除原来的设置
-			TIM_SET_CAPTUREPOLARITY(&htim3,TIM_CHANNEL_2,TIM_ICPOLARITY_RISING);	  //配置TIM3CH2为上升沿捕获
+			if((TIM3CH2_CAPTURE_STA & 0x8000) == 0)		//还未成功捕获
+			{
+				if(TIM3CH2_CAPTURE_STA & 0x4000)			//捕获到一个下降沿
+				{
+					TIM3CH2_CAPTURE_STA|= 0x8000;			//标记成功捕获到一次高电平脉冲
+					TIM3CH2_CAPTURE_VAL = HAL_TIM_ReadCapturedValue(&htim3,TIM_CHANNEL_2);//获取当前的捕获值
+					TIM_RESET_CAPTUREPOLARITY(&htim3,TIM_CHANNEL_2);						  //清除原来的设置
+					TIM_SET_CAPTUREPOLARITY(&htim3,TIM_CHANNEL_2,TIM_ICPOLARITY_RISING);	  //配置TIM3CH2为上升沿捕获
+					TIM3CH2_Flag = 0;//标志位清0
+				}
+				else
+				{
+					TIM3CH2_CAPTURE_STA = 0;			//清空自定义的状态寄存器
+					TIM3CH2_CAPTURE_VAL= 0;			//清空捕获值
+					TIM3CH2_CAPTURE_STA |= 0x4000;		//标记捕获到了上升沿
+					__HAL_TIM_DISABLE(&htim3);		//关闭定时器3
+					__HAL_TIM_SET_COUNTER(&htim3,0);
+					TIM_RESET_CAPTUREPOLARITY(&htim3,TIM_CHANNEL_2);//清除原来的设置
+					TIM_SET_CAPTUREPOLARITY(&htim3,TIM_CHANNEL_2,TIM_ICPOLARITY_FALLING);//TIM3CH2设置为下降沿捕获
+					__HAL_TIM_ENABLE(&htim3);	//使能定时器3
+				}
+			}
 		}
-		else
+		/* 测PWM信号周期 */
+		if(TIM3CH2_Flag == 0)
 		{
-			TIM3CH2_CAPTURE_STA = 0;			//清空自定义的状态寄存器
-			TIM3CH2_CAPTURE_VAL= 0;			//清空捕获值
-			TIM3CH2_CAPTURE_STA |= 0x4000;		//标记捕获到了上升沿
-			__HAL_TIM_DISABLE(&htim3);		//关闭定时器3
-			__HAL_TIM_SET_COUNTER(&htim3,0);
-			TIM_RESET_CAPTUREPOLARITY(&htim3,TIM_CHANNEL_2);//清除原来的设置
-			TIM_SET_CAPTUREPOLARITY(&htim3,TIM_CHANNEL_2,TIM_ICPOLARITY_FALLING);//TIM3CH2设置为下降沿捕获
-			__HAL_TIM_ENABLE(&htim3);	//使能定时器3
+			if((TIM3CH2_CAPTURE_Period_STA & 0x8000) == 0)	//还未成功捕获
+			{
+				if(TIM3CH2_CAPTURE_Period_STA & 0x4000)	//捕获到第二个上升沿
+				{	
+					TIM3CH2_CAPTURE_Period_STA |= 0X8000;
+					TIM3CH2_CAPTURE_Period_VAL = HAL_TIM_ReadCapturedValue(&htim3,TIM_CHANNEL_2);
+					TIM3CH2_Flag = 1;//标志位置一
+				}
+				else									//捕获到第一个上升沿
+				{
+					TIM3CH2_CAPTURE_Period_STA = 0;
+					TIM3CH2_CAPTURE_Period_VAL = 0;
+					TIM3CH2_CAPTURE_Period_STA |=0X4000;
+					__HAL_TIM_DISABLE(&htim3);		//关闭定时器3
+					__HAL_TIM_SET_COUNTER(&htim3,0);
+					__HAL_TIM_ENABLE(&htim3);	//使能定时器3
+				}
+			}
 		}
+		
 	}
+	
 }
 /* USER CODE END 1 */

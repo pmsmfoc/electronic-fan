@@ -43,8 +43,12 @@ void MX_TIM3_Init(void);
 void HAL_TIM_MspPostInit(TIM_HandleTypeDef *htim);
 
 /* USER CODE BEGIN Prototypes */
+extern uint8_t TIM3CH2_Flag;
 extern uint16_t TIM3CH2_CAPTURE_STA;	//输入捕获状态
 extern uint16_t TIM3CH2_CAPTURE_VAL;
+
+extern uint16_t TIM3CH2_CAPTURE_Period_STA; //周期捕获的输入状态
+extern uint16_t TIM3CH2_CAPTURE_Period_VAL; //周期捕获的值
 /* USER CODE END Prototypes */
 
 #ifdef __cplusplus

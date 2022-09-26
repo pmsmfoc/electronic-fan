@@ -93,7 +93,8 @@ int main(void)
   HAL_TIM_IC_Start_IT(&htim3,TIM_CHANNEL_2);//开启输入捕获中断
   HAL_TIM_PWM_Start(&htim3,TIM_CHANNEL_1);//开启CH1 PWM输出
   HAL_TIM_Base_Start_IT(&htim3);
-  uint64_t temp=0;
+  uint64_t temp_high = 0;
+  uint64_t temp_period = 0;
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -104,13 +105,21 @@ int main(void)
 	  HAL_GPIO_TogglePin(GPIOB,GPIO_PIN_1);
 	  if(TIM3CH2_CAPTURE_STA & 0x8000)//如果捕获到高电平
 	  {
-		  temp = TIM3CH2_CAPTURE_STA & 0x3fff;
-		  temp *= 0xffff;
-		  temp += TIM3CH2_CAPTURE_VAL;
-		  printf("high:%lld us \r\n",temp);
+		  temp_high = TIM3CH2_CAPTURE_STA & 0x3fff;
+		  temp_high *= 0xffff;
+		  temp_high += TIM3CH2_CAPTURE_VAL;
+		  printf("high:%lld us \r\n",temp_high);
 		  TIM3CH2_CAPTURE_STA = 0;		//clearerr capture state
-		  
 	  }
+	  if(TIM3CH2_CAPTURE_Period_STA & 0x8000)
+	  {
+		  temp_period = TIM3CH2_CAPTURE_Period_STA & 0x3fff;
+		  temp_period *= 0xffff;
+		  temp_period += TIM3CH2_CAPTURE_Period_VAL;
+		  printf("period:%lld us \r\n",temp_period);
+		  TIM3CH2_CAPTURE_Period_STA = 0;
+	  }
+	  
     /* USER CODE BEGIN 3 */	
 	  HAL_Delay(1000);
   }
